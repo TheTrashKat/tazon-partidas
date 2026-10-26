@@ -16,7 +16,7 @@ import {
 (function () {
   const KIT = 'https://thetrashkat.github.io/tazon-para-dos-marca/';
   // Script de Apps Script (cuenta dueña del Drive). Se puede cambiar en «Ajustes → Avanzado».
-  const SERVIDOR_DEF = '';
+  const SERVIDOR_DEF = 'https://script.google.com/macros/s/AKfycbxRxJEElD2clGVKdlCiBHDnV1Gk_Rdwjexrdm8BjVn7To7B3G_ACs7ivf5uTt6k1G7V/exec';
   const WEB_BASE = 'https://thetrashkat.github.io/tazon-para-dos-web/';
   const WEB = WEB_BASE + '#partidas';
   // Proyecto de Firebase de la plataforma de mesas (valores públicos; la seguridad la dan las reglas de Firestore)
