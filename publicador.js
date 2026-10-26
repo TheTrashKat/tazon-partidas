@@ -89,13 +89,23 @@ import {
 
   /* ------------------------------------------------------------ formulario */
   const form = $('#form');
-  const campos = ['titulo', 'juego', 'descripcion', 'fecha', 'cupos', 'inicio', 'fin', 'lugar', 'nivel', 'narra', 'reserva', 'cta', 'enfoque', 'receta', 'invertir'];
+  const campos = ['titulo', 'juego', 'descripcion', 'fecha', 'cupos', 'inicio', 'fin', 'lugar', 'nivel', 'narra', 'reserva', 'cta', 'sello', 'enfoque', 'receta', 'invertir'];
   let foto = '';          // data URL reducida (la foto original no se sube: solo se usa para dibujar)
   let editando = null;    // { id, sha } cuando se edita una partida existente
   let textoManual = false;
   let mesaId = '';        // mesa de la plataforma de la que sale esta partida
 
   $('#f-receta').replaceChildren(...Object.entries(D.RECIPES).map(([k, r]) => new Option(r.label, k)));
+  // Muestras de color: cada una enseña el fondo y el bloque de la combinación
+  const NOMBRE_RECETA = { general: 'Turquesa', mesa: 'Coral', convocatoria: 'Sol', podcast: 'Tinta' };
+  $('#muestras').replaceChildren(...Object.entries(D.RECIPES).map(([k, r]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'muestra'; b.dataset.receta = k;
+    b.setAttribute('role', 'radio'); b.title = r.label;
+    b.innerHTML = `<i style="background:linear-gradient(160deg, ${r.bg} 58%, ${r.block} 58%)"></i>${NOMBRE_RECETA[k] || k}`;
+    b.onclick = () => { $('#f-receta').value = k; marcarMuestra(); actualizar(); };
+    return b;
+  }));
+  function marcarMuestra() { $$('.muestra').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.receta === $('#f-receta').value))); }
   $('#f-lugar').value = LUGAR;
   $('#f-reserva').value = WA_GRUPO;
   $('#f-fecha').value = proximoSabado();
@@ -125,7 +135,7 @@ import {
       dia: f ? String(f.getDate()) : '', mes: f ? MESES[f.getMonth()].slice(0, 3).toUpperCase() : '',
       fecha: p.fecha ? fechaLarga(p.fecha) : '', hora: rangoHora(p.inicio, p.fin), lugar: p.lugar,
       nivel: p.nivel, cupos: p.cupos ? `${p.cupos} ${p.cupos === 1 ? 'CUPO' : 'CUPOS'}` : '',
-      narra: p.narra ? `Narra: ${p.narra}` : '', cta: p.cta, usuario: USUARIO,
+      narra: p.narra ? `Narra: ${p.narra}` : '', cta: p.cta, sello: p.sello, usuario: USUARIO,
     };
   }
   function textoRedes(p) {
@@ -168,6 +178,7 @@ import {
     cancelAnimationFrame(pendienteDibujo);
     pendienteDibujo = requestAnimationFrame(() => {
       const p = leer(), v = valores(p);
+      marcarMuestra();
       $('#prev-post').innerHTML = svg(PLANTILLA.post, v);
       $('#prev-historia').innerHTML = svg(PLANTILLA.historia, v);
       if (!textoManual) $('#f-texto').value = textoRedes(p);
@@ -309,7 +320,7 @@ import {
         titulo: p.titulo, juego: p.juego, descripcion: p.descripcion, fecha: p.fecha, inicio: p.inicio, fin: p.fin, lugar: p.lugar,
         nivel: p.nivel, cupos: p.cupos, narra: p.narra, reserva: p.reserva, texto: $('#f-texto').value,
         mesa: mesaId || previo.mesa || '',
-        diseno: { receta: p.receta, invertir: p.invertir, enfoque: p.enfoque, cta: p.cta, con_imagen: !!foto },
+        diseno: { receta: p.receta, invertir: p.invertir, enfoque: p.enfoque, cta: p.cta, sello: p.sello, con_imagen: !!foto },
         imagenes,
       };
       if (!editando) partida.publicado = {};
@@ -349,50 +360,67 @@ import {
     $('#lista').replaceChildren(...ver.map(tarjeta));
   }
   function tarjeta(p) {
-    const el = document.createElement('article'); el.className = 'tarjeta';
     const pasada = p.fecha < hoyIso();
-    const redes = Object.entries(p.publicado || {}).map(([k, r]) => {
+    const el = document.createElement('article'); el.className = `tarjeta ${pasada ? 'pasada' : p.estado}`;
+    const f = fechaLocal(p.fecha);
+    const redes = Object.entries(p.publicado || {}).filter(([k]) => !k.startsWith('_')).map(([k, r]) => {
       const nombre = REDES[k.split(':')[0]] || k; const extra = k.includes(':') ? ' ' + k.split(':').slice(1).join(':') : '';
       return `<span class="${r.ok ? 'ok' : 'error'}" title="${D.esc(r.error || r.fecha || '')}">${r.ok ? '✓' : '✗'} ${D.esc(nombre + extra)}</span>`;
     }).join('');
-    el.innerHTML = `<img loading="lazy" alt="Post de ${D.esc(p.titulo)}" src="${urlImagen(p, 'post')}">
+    const avisoMesa = p.mesa && mesasEstado[p.mesa] === 'cancelada' && p.estado !== 'cancelada' && !pasada;
+    el.innerHTML = `<div class="piezas-mini">
+        <img loading="lazy" alt="Post de ${D.esc(p.titulo)}" src="${D.esc(urlImagen(p, 'post'))}">
+        ${urlImagen(p, 'historia') ? `<img class="h" loading="lazy" alt="Historia" src="${D.esc(urlImagen(p, 'historia'))}">` : ''}
+      </div>
       <div class="cuerpo">
-        <div><span class="pildora ${pasada ? 'pasada' : p.estado}">${pasada ? 'ya pasó' : D.esc(p.estado)}</span></div>
-        <h3>${D.esc(p.titulo)}</h3>
-        <div class="meta">${D.esc([p.juego, fechaLarga(p.fecha), rangoHora(p.inicio, p.fin)].filter(Boolean).join(' · '))}</div>
-        ${redes ? `<div class="redes">${redes}</div>` : p.estado === 'aprobada' ? '<div class="meta">Publicando… recarga en un minuto.</div>' : ''}
-        ${p.mesa && mesasEstado[p.mesa] === 'cancelada' && p.estado !== 'cancelada' && !pasada ? '<div class="aviso-mesa">⚠ El GM canceló esta mesa en la plataforma. Cancélala aquí también.</div>' : ''}
+        <div class="cabeza">
+          <div class="dia" aria-label="${D.esc(fechaLarga(p.fecha))}"><small>${MESES[f.getMonth()].slice(0, 3)}</small>${f.getDate()}</div>
+          <div>
+            <span class="pildora ${pasada ? 'pasada' : p.estado}">${pasada ? 'ya pasó' : D.esc(p.estado)}</span>
+            <h3>${D.esc(p.titulo)}</h3>
+            <div class="meta">${D.esc([p.juego, `${cap(DIAS[f.getDay()])} ${rangoHora(p.inicio, p.fin)}`].filter(Boolean).join(' · '))}
+              ${p.mesa ? ` · <a href="${D.esc(new URL(`mesas/${p.mesa}`, WEB_BASE).href)}" target="_blank" rel="noopener">ver mesa</a>` : ''}</div>
+          </div>
+        </div>
+        ${avisoMesa ? '<div class="aviso-mesa">⚠ El GM canceló esta mesa en la plataforma. Cancela también el anuncio.</div>' : ''}
+        ${redes ? `<div class="redes">${redes}</div>` : p.estado === 'aprobada' && !pasada ? '<div class="meta">Publicando… recarga en un minuto.</div>' : ''}
         ${p.estado === 'pendiente' ? `<label>Texto para redes</label><textarea data-texto>${D.esc(p.texto || '')}</textarea>` : ''}
         <div class="botones"></div>
-        <div class="estado"></div>
+        <div class="mas"></div>
+        <div class="estado" role="status"></div>
       </div>`;
-    const bs = $('.botones', el), st = $('.estado', el);
-    const boton = (txt, clase, fn) => { const b = document.createElement('button'); b.className = 'boton ' + clase; b.textContent = txt; b.onclick = async () => { b.disabled = true; try { await fn(); } catch (err) { st.textContent = '❌ ' + err.message; } finally { b.disabled = false; } }; bs.append(b); };
+    const bs = $('.botones', el), mas = $('.mas', el), st = $('.estado', el);
+    const accion = (donde, txt, clase, fn) => {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = txt;
+      if (donde === bs) b.className = 'boton ' + clase; else if (clase) b.className = clase;
+      b.onclick = async () => { b.disabled = true; try { await fn(); } catch (err) { st.textContent = '❌ ' + err.message; } finally { b.disabled = false; } };
+      donde.append(b);
+    };
     if (p.estado === 'pendiente') {
-      boton('Aprobar y publicar ↗', 'primario', async () => {
+      accion(bs, 'Aprobar y publicar ↗', 'primario', async () => {
         if (!confirmar(`¿Publicar «${p.titulo}» en Telegram, Facebook e Instagram?`)) return;
         exigirAdmin();
         await guardarEstado(p, { estado: 'aprobada', texto: $('[data-texto]', el).value, aprobada: new Date().toISOString() });
         st.textContent = 'Publicando…';
         const r = await servidor('publicar', { anuncioId: p.id });
-        const redes = Object.entries(r.publicado || {}).filter(([k]) => !k.startsWith('_'));
+        const res = Object.entries(r.publicado || {}).filter(([k]) => !k.startsWith('_'));
         st.textContent = r.publicado?._aviso ? '✅ Aprobado. ' + r.publicado._aviso
-          : `✅ Aprobado. ${redes.filter(([, x]) => x.ok).length} de ${redes.length} redes publicadas.`;
+          : `✅ Aprobado. ${res.filter(([, x]) => x.ok).length} de ${res.length} redes publicadas.`;
         setTimeout(cargarLista, 1500);
       });
-      boton('Guardar texto', '', async () => { await guardarEstado(p, { texto: $('[data-texto]', el).value }); st.textContent = '✅ Texto guardado.'; });
     }
     if (p.estado !== 'cancelada') {
-      boton('Compartir en WhatsApp', 'wa', async () => {
+      accion(bs, 'Compartir en WhatsApp', 'wa', async () => {
         st.textContent = 'Preparando…';
         const blob = await blobDe(urlImagen(p, 'post'));
         await compartir(p.texto || '', [new File([blob], p.id + '.jpg', { type: 'image/jpeg' })], st);
       });
-      boton('Historia', '', async () => { descargar(p.id + '-historia.jpg', await blobDe(urlImagen(p, 'historia'))); });
-      boton('Copiar texto', '', async () => { await navigator.clipboard.writeText(p.texto || ''); st.textContent = '✅ Texto copiado.'; });
-      boton('Editar', '', async () => { cargarEnFormulario(p); });
-      boton(p.estado === 'aprobada' ? 'Cancelar partida' : 'Descartar', 'peligro', async () => {
-        if (!confirmar(p.estado === 'aprobada' ? 'Se quita de la web. Lo que ya salió en redes hay que borrarlo a mano. ¿Continuar?' : '¿Descartar esta partida? No se publicará.')) return;
+      if (p.estado === 'pendiente') accion(mas, 'Guardar texto', '', async () => { await guardarEstado(p, { texto: $('[data-texto]', el).value }); st.textContent = '✅ Texto guardado.'; });
+      accion(mas, 'Descargar historia', '', async () => { descargar(p.id + '-historia.jpg', await blobDe(urlImagen(p, 'historia'))); });
+      accion(mas, 'Copiar texto', '', async () => { await navigator.clipboard.writeText(p.texto || ''); st.textContent = '✅ Texto copiado.'; });
+      accion(mas, 'Editar', '', async () => { cargarEnFormulario(p); });
+      accion(mas, p.estado === 'aprobada' ? 'Cancelar anuncio' : 'Descartar', 'peligro', async () => {
+        if (!confirmar(p.estado === 'aprobada' ? 'Lo que ya salió en redes hay que borrarlo a mano. ¿Cancelar el anuncio?' : '¿Descartar este anuncio? No se publicará.')) return;
         await guardarEstado(p, { estado: 'cancelada' }); cargarLista();
       });
     }
@@ -404,7 +432,7 @@ import {
   }
   function cargarEnFormulario(p) {
     const d = p.diseno || {};
-    escribir({ ...p, receta: d.receta || 'general', invertir: !!d.invertir, enfoque: d.enfoque || 'centro', cta: d.cta || 'ESCRÍBENOS PARA RESERVAR' });
+    escribir({ ...p, receta: d.receta || 'general', invertir: !!d.invertir, enfoque: d.enfoque || 'centro', cta: d.cta || 'ESCRÍBENOS PARA RESERVAR', sello: d.sello || '' });
     editando = { id: p.id, datos: p }; mesaId = p.mesa || '';
     foto = ''; mostrarFoto();
     textoManual = true; $('#f-texto').value = p.texto || '';
@@ -487,6 +515,11 @@ import {
       cupos: libres || m.cupos || '', lugar: m.modalidad === 'online' ? 'En línea' : (m.lugar || LUGAR),
       nivel: etiquetas.includes('principiantes') ? 'Para principiantes' : 'Todo nivel',
       narra: m.gmNombre || '', reserva: new URL(`mesas/${m.id}`, WEB_BASE).href, cta: 'INSCRÍBETE EN LA WEB',
+      // Personalización que eligió el GM en la web
+      receta: { teal: 'general', coral: 'mesa', sun: 'convocatoria', ink: 'podcast' }[m.color] || 'general',
+      enfoque: { arriba: 'arriba', abajo: 'abajo' }[m.enfoque] || 'centro', invertir: false,
+      sello: libres > 0 && libres <= 2 ? '¡ÚLTIMOS CUPOS!' : etiquetas.includes('adultos') ? '+18'
+        : String(m.tipo || '').startsWith('campaña') ? 'NUEVA CAMPAÑA' : '',
     });
     editando = null; mesaId = m.id; textoManual = false; foto = ''; mostrarFoto();
     $('#titulo-form').textContent = 'Anuncio de mesa';

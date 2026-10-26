@@ -52,15 +52,34 @@
   .texto textarea { font-size: 15px; min-height: 230px; }
   /* revisión */
   .panel { padding: 22px; max-width: 1200px; margin: 0 auto; }
-  .lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 20px; margin-top: 16px; }
-  .tarjeta { background: #fff; border: 3px solid var(--ink); border-radius: 18px; box-shadow: 6px 6px 0 var(--ink); overflow: hidden; display: flex; flex-direction: column; }
-  .tarjeta img { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; display: block; border-bottom: 3px solid var(--ink); background: var(--cream); }
-  .tarjeta .cuerpo { padding: 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
-  .tarjeta h3 { font: 800 24px/1 'Barlow Condensed', sans-serif; text-transform: uppercase; margin: 0; }
+  .lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr)); gap: 22px; margin-top: 16px; }
+  .tarjeta { position: relative; display: grid; grid-template-columns: 168px 1fr; background: #fff; border: 3px solid var(--ink); border-radius: 18px; box-shadow: 6px 6px 0 var(--ink); overflow: hidden; }
+  .tarjeta.pendiente { box-shadow: 6px 6px 0 var(--sun), 6px 6px 0 3px var(--ink); }
+  .tarjeta.cancelada, .tarjeta.pasada { opacity: .72; }
+  .tarjeta .piezas-mini { position: relative; background: var(--cream) var(--dots); border-right: 3px solid var(--ink); padding: 14px 12px 40px; }
+  .tarjeta .piezas-mini img { display: block; width: 100%; aspect-ratio: 4 / 5; object-fit: cover; border: 2px solid var(--ink); border-radius: 8px; background: #fff; }
+  .tarjeta .piezas-mini img.h { position: absolute; right: 8px; bottom: 10px; width: 46%; aspect-ratio: 9 / 16; box-shadow: 4px 4px 0 var(--ink); transform: rotate(4deg); }
+  .tarjeta .cuerpo { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .tarjeta .cabeza { display: flex; gap: 12px; align-items: flex-start; }
+  .tarjeta .dia { flex: none; display: grid; place-items: center; width: 58px; padding: 4px 0 6px; background: var(--sun); border: 2px solid var(--ink); border-radius: 10px; box-shadow: 3px 3px 0 var(--ink); font: 800 30px/1 'Barlow Condensed', sans-serif; }
+  .tarjeta .dia small { font: 700 11px 'Barlow', sans-serif; letter-spacing: .1em; text-transform: uppercase; }
+  .tarjeta h3 { font: 800 24px/1 'Barlow Condensed', sans-serif; text-transform: uppercase; margin: 4px 0 2px; overflow-wrap: anywhere; }
   .tarjeta .meta { color: var(--muted); font-size: 14px; }
-  .tarjeta textarea { font-size: 14px; min-height: 120px; }
-  .tarjeta .botones { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+  .tarjeta .meta a { color: var(--ink); font-weight: 700; }
+  .tarjeta textarea { font-size: 14px; min-height: 110px; }
+  .tarjeta .botones { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 4px; }
   .tarjeta .botones .boton { font-size: 12px; padding: 8px 12px; }
+  .tarjeta .botones .boton.primario { font-size: 13px; box-shadow: 3px 3px 0 var(--ink); }
+  .tarjeta .mas { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+  .tarjeta .mas button { font: 700 13px 'Barlow', sans-serif; background: none; border: 0; padding: 4px 0; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  .tarjeta .mas button.peligro { color: #8a2b3b; }
+  .tarjeta .mas button:disabled { opacity: .5; cursor: wait; }
+  @media (max-width: 560px) { .tarjeta { grid-template-columns: 1fr; } .tarjeta .piezas-mini { border-right: 0; border-bottom: 3px solid var(--ink); padding-bottom: 14px; } .tarjeta .piezas-mini img { width: 62%; } .tarjeta .piezas-mini img.h { width: 30%; right: 14%; } }
+  .muestras { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .muestra { display: grid; gap: 4px; justify-items: center; padding: 6px 4px; border: 2px solid transparent; border-radius: 12px; background: none; cursor: pointer; font: 600 12px 'Barlow', sans-serif; color: var(--ink); }
+  .muestra i { display: block; width: 100%; height: 34px; border: 2px solid var(--ink); border-radius: 8px; }
+  .muestra[aria-checked=true] { border-color: var(--ink); background: #fff; box-shadow: 3px 3px 0 var(--ink); }
+  .muestra:focus-visible { outline: 3px solid var(--coral); outline-offset: 2px; }
   .pildora { display: inline-block; font: 700 12px 'Barlow', sans-serif; letter-spacing: .08em; text-transform: uppercase; padding: 4px 10px; border: 2px solid var(--ink); border-radius: 999px; }
   .pildora.pendiente { background: var(--sun); } .pildora.aprobada { background: var(--teal); } .pildora.cancelada { background: var(--cream); } .pildora.pasada { background: #ddd; }
   .redes { display: flex; flex-wrap: wrap; gap: 4px; font-size: 13px; }
@@ -141,9 +160,10 @@
     <label for="f-reserva">Enlace para reservar</label>
     <input type="url" id="f-reserva" name="reserva">
     <label for="f-cta">Texto del botón</label>
-    <input type="text" id="f-cta" name="cta" value="ESCRÍBENOS PARA RESERVAR">
+    <input type="text" id="f-cta" name="cta" value="ESCRÍBENOS PARA RESERVAR" list="ctas" maxlength="40">
+    <datalist id="ctas"><option>ESCRÍBENOS PARA RESERVAR</option><option>INSCRÍBETE EN LA WEB</option><option>APARTA TU CUPO</option><option>LINK EN LA BIO</option><option>ESCRÍBENOS POR WHATSAPP</option></datalist>
 
-    <div class="grupo">Imagen y color</div>
+    <div class="grupo">Imagen, color y sello</div>
     <div class="foto" id="foto" tabindex="0" role="button" aria-label="Elegir imagen">
       <img id="foto-prev" alt="" hidden>
       <b id="foto-txt">Elegir o pegar imagen (opcional)</b><br>
@@ -152,8 +172,12 @@
     </div>
     <div class="fila">
       <div><label for="f-enfoque">Enfoque</label><select id="f-enfoque" name="enfoque"><option value="centro">Centro</option><option value="arriba">Arriba</option><option value="abajo">Abajo</option><option value="izquierda">Izquierda</option><option value="derecha">Derecha</option></select></div>
-      <div><label for="f-receta">Color</label><select id="f-receta" name="receta"></select></div>
+      <div><label for="f-sello">Sello (opcional)</label><input type="text" id="f-sello" name="sello" list="sellos" maxlength="24" placeholder="Sin sello"></div>
     </div>
+    <datalist id="sellos"><option>¡ÚLTIMOS CUPOS!</option><option>NUEVA CAMPAÑA</option><option>ONE-SHOT</option><option>PRIMERA VEZ</option><option>SIN COSTO</option><option>CON SNACKS</option><option>+18</option><option>TERROR</option><option>LGBTI+</option></datalist>
+    <label id="l-receta">Color</label>
+    <select id="f-receta" name="receta" hidden></select>
+    <div class="muestras" role="radiogroup" aria-labelledby="l-receta" id="muestras"></div>
     <label class="check"><input type="checkbox" id="f-invertir" name="invertir"> Invertir colores (fondo tinta)</label>
     <label class="check"><input type="checkbox" id="f-quitar" > Quitar la imagen</label>
 
@@ -222,6 +246,6 @@
 <script src="https://thetrashkat.github.io/tazon-para-dos-marca/editor/brand-data.js"></script>
 <script src="https://thetrashkat.github.io/tazon-para-dos-marca/editor/primitives.js"></script>
 <script src="https://thetrashkat.github.io/tazon-para-dos-marca/editor/templates.js"></script>
-<script type="module" src="publicador.js?v=20261025b"></script>
+<script type="module" src="publicador.js?v=20261025c"></script>
 </body>
 </html>
