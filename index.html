@@ -66,6 +66,17 @@
   .redes { display: flex; flex-wrap: wrap; gap: 4px; font-size: 13px; }
   .redes span { padding: 2px 8px; border-radius: 8px; background: var(--cream); border: 1px solid rgba(40,32,59,.3); }
   .redes .ok { background: #d9f7e5; } .redes .error { background: #fbdde2; }
+  .mesas { margin-top: 16px; padding: 16px; border: 3px solid var(--ink); border-radius: 18px; background: var(--cream); }
+  .mesas h3 { font: 800 22px/1 'Barlow Condensed', sans-serif; text-transform: uppercase; margin: 0 0 6px; display: flex; gap: 8px; align-items: center; }
+  .mesas .badge { display: inline-block; min-width: 22px; padding: 0 6px; border-radius: 999px; background: var(--coral); font: 700 14px/22px 'Barlow', sans-serif; text-align: center; }
+  .mesas-lista { display: grid; gap: 8px; }
+  .mesa-fila { display: flex; gap: 12px; align-items: center; background: #fff; border: 2px solid var(--ink); border-radius: 12px; padding: 8px 10px; }
+  .mesa-fila img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; flex: none; }
+  .mesa-fila div { flex: 1; min-width: 0; }
+  .mesa-fila strong { display: block; }
+  .mesa-fila .meta { color: var(--muted); font-size: 14px; }
+  .mesa-fila .boton { font-size: 12px; padding: 8px 12px; flex: none; }
+  .aviso-mesa { background: #fbdde2; border: 1px solid #8a2b3b; border-radius: 8px; padding: 4px 8px; font-size: 13px; }
   .filtros { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .vacio { padding: 30px; text-align: center; color: var(--muted); border: 3px dashed rgba(40,32,59,.3); border-radius: 18px; margin-top: 16px; }
   .ajustes { max-width: 720px; }
@@ -174,6 +185,11 @@
     <button class="boton" id="b-recargar">↻ Recargar</button>
   </div>
   <div class="estado" id="estado-rev" role="status"></div>
+  <div class="mesas" id="mesas" hidden>
+    <h3>Mesas nuevas de la plataforma <span class="badge" id="n-mesas">0</span></h3>
+    <p class="ayuda">Los GMs las crearon en la web y todavía no tienen anuncio. «Preparar anuncio» llena el formulario con sus datos y su portada; revisas, envías y apruebas como cualquier partida.</p>
+    <div class="mesas-lista" id="mesas-lista"></div>
+  </div>
   <div class="lista" id="lista"></div>
 </section>
 

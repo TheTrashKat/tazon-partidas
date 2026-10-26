@@ -4,11 +4,17 @@
    - «Enviar a revisión» sube partida.json + post.jpg + historia.jpg en un solo commit a partidas/<id>/ (estado: pendiente).
    - «Aprobar» cambia el estado a «aprobada»; la acción de GitHub (.github/workflows/publicar.yml) publica en
      Telegram, Facebook e Instagram, guarda el resultado en partida.json y actualiza partidas.json para la web.
-   - WhatsApp no permite publicar por API en grupos ni canales: «Compartir» abre el menú del teléfono con la imagen y el texto. */
+   - WhatsApp no permite publicar por API en grupos ni canales: «Compartir» abre el menú del teléfono con la imagen y el texto.
+   - Las mesas que los GMs crean en la plataforma (Firestore, lectura pública) aparecen en «Revisión» hasta que tengan
+     anuncio; «Preparar anuncio» (o ?mesa=<id> en la URL) llena el formulario. La partida guarda «mesa» con su id. */
 (function () {
   const KIT = 'https://thetrashkat.github.io/tazon-para-dos-marca/';
   const REPO_DEF = 'TheTrashKat/tazon-partidas';
-  const WEB = 'https://thetrashkat.github.io/tazon-para-dos-web/#partidas';
+  const WEB_BASE = 'https://thetrashkat.github.io/tazon-para-dos-web/';
+  const WEB = WEB_BASE + '#partidas';
+  // Proyecto de Firebase de la plataforma de mesas (valores públicos; la seguridad la dan las reglas de Firestore)
+  const FIRESTORE = 'https://firestore.googleapis.com/v1/projects/tazon-para-dos/databases/(default)/documents';
+  const FIREBASE_KEY = 'AIzaSyBDE5_lvYBKD8MYAXAimF7QF_SH5QxH36E';
   const D = window.TPDDraw, T = window.TPD;
   const PLANTILLA = { post: byId('partida_post'), historia: byId('partida_historia') };
   const $ = (s, el = document) => el.querySelector(s);
@@ -75,6 +81,7 @@
   let foto = '';          // data URL reducida (no se sube al repo: solo se usa para dibujar)
   let editando = null;    // { id, sha } cuando se edita una partida existente
   let textoManual = false;
+  let mesaId = '';        // mesa de la plataforma de la que sale esta partida
 
   $('#f-receta').replaceChildren(...Object.entries(D.RECIPES).map(([k, r]) => new Option(r.label, k)));
   $('#f-lugar').value = LUGAR;
@@ -152,12 +159,12 @@
       $('#prev-post').innerHTML = svg(PLANTILLA.post, v);
       $('#prev-historia').innerHTML = svg(PLANTILLA.historia, v);
       if (!textoManual) $('#f-texto').value = textoRedes(p);
-      guardado.set('borrador', { ...p, foto, editando, texto: $('#f-texto').value, textoManual });
+      guardado.set('borrador', { ...p, foto, editando, mesaId, texto: $('#f-texto').value, textoManual });
     });
   }
   form.addEventListener('input', () => { textoManual = false; actualizar(); });
   form.addEventListener('change', actualizar);
-  $('#f-texto').addEventListener('input', () => { textoManual = true; guardado.set('borrador', { ...leer(), foto, editando, texto: $('#f-texto').value, textoManual }); });
+  $('#f-texto').addEventListener('input', () => { textoManual = true; guardado.set('borrador', { ...leer(), foto, editando, mesaId, texto: $('#f-texto').value, textoManual }); });
 
   /* ------------------------------------------------------------ imagen */
   async function ponerFoto(file) {
@@ -281,6 +288,7 @@
         id, estado: 'pendiente', creada: previo.creada || new Date().toISOString(), actualizada: new Date().toISOString(),
         titulo: p.titulo, juego: p.juego, descripcion: p.descripcion, fecha: p.fecha, inicio: p.inicio, fin: p.fin, lugar: p.lugar,
         nivel: p.nivel, cupos: p.cupos, narra: p.narra, reserva: p.reserva, texto: $('#f-texto').value,
+        mesa: mesaId || previo.mesa || '',
         diseno: { receta: p.receta, invertir: p.invertir, enfoque: p.enfoque, cta: p.cta, con_imagen: !!foto },
         imagenes: { post: 'post.jpg', historia: 'historia.jpg' },
         publicado: previo.publicado || {},
@@ -291,7 +299,7 @@
         [`partidas/${id}/partida.json`]: JSON.stringify(partida, null, 2) + '\n',
         [`partidas/${id}/post.jpg`]: pz.post, [`partidas/${id}/historia.jpg`]: pz.historia,
       }, `${editando ? 'Actualiza' : 'Nueva'} partida: ${p.titulo} (${p.fecha})`);
-      guardado.del('borrador'); editando = null;
+      guardado.del('borrador'); editando = null; mesaId = '';
       estado(partida.estado === 'aprobada' ? '✅ Partida actualizada en la web. Las redes no se vuelven a publicar.' : '✅ Enviada a revisión. Apruébala en la pestaña «Revisión» para publicarla.');
       $('#titulo-form').textContent = 'Nueva partida';
       cargarLista();
@@ -321,11 +329,11 @@
         shaMain = 'main';
       }
       todas.sort((a, b) => (a.fecha + a.inicio).localeCompare(b.fecha + b.inicio));
-      const n = todas.filter((x) => x.estado === 'pendiente').length;
-      $('#n-pendientes').hidden = !n; $('#n-pendientes').textContent = n;
+      contarPendientes();
       estado(token ? '' : 'Sin token solo se ven las partidas aprobadas. Agrega tu token en «Ajustes».', '#estado-rev');
       pintarLista();
     } catch (err) { estado('❌ ' + err.message, '#estado-rev'); }
+    await cargarMesas();
   }
   const urlImagen = (p, cual) => `https://raw.githubusercontent.com/${ajustes().repo}/${shaMain}/partidas/${p.id}/${p.imagenes?.[cual] || cual + '.jpg'}`;
   function pintarLista() {
@@ -348,6 +356,7 @@
         <h3>${D.esc(p.titulo)}</h3>
         <div class="meta">${D.esc([p.juego, fechaLarga(p.fecha), rangoHora(p.inicio, p.fin)].filter(Boolean).join(' · '))}</div>
         ${redes ? `<div class="redes">${redes}</div>` : p.estado === 'aprobada' ? '<div class="meta">Publicando… recarga en un minuto.</div>' : ''}
+        ${p.mesa && mesasEstado[p.mesa] === 'cancelada' && p.estado !== 'cancelada' && !pasada ? '<div class="aviso-mesa">⚠ El GM canceló esta mesa en la plataforma. Cancélala aquí también.</div>' : ''}
         ${p.estado === 'pendiente' ? `<label>Texto para redes</label><textarea data-texto>${D.esc(p.texto || '')}</textarea>` : ''}
         <div class="botones"></div>
         <div class="estado"></div>
@@ -388,13 +397,102 @@
   function cargarEnFormulario(p) {
     const d = p.diseno || {};
     escribir({ ...p, receta: d.receta || 'general', invertir: !!d.invertir, enfoque: d.enfoque || 'centro', cta: d.cta || 'ESCRÍBENOS PARA RESERVAR' });
-    editando = { id: p.id, datos: p };
+    editando = { id: p.id, datos: p }; mesaId = p.mesa || '';
     foto = ''; mostrarFoto();
     textoManual = true; $('#f-texto').value = p.texto || '';
     $('#titulo-form').textContent = 'Editar partida';
     estado(d.con_imagen ? 'Vuelve a poner la imagen (no se guarda la original) y pulsa «Enviar».' : 'Cambia lo que necesites y pulsa «Enviar».');
     mostrarTab('nueva'); actualizar();
   }
+  function contarPendientes() {
+    const n = todas.filter((x) => x.estado === 'pendiente').length + mesasNuevas.length;
+    $('#n-pendientes').hidden = !n; $('#n-pendientes').textContent = n;
+  }
+
+  /* ------------------------------------------------------------ mesas de la plataforma (Firestore) */
+  let mesasNuevas = [], mesasEstado = {};
+  function valorFs(v) {
+    if (!v) return null;
+    if ('stringValue' in v) return v.stringValue;
+    if ('integerValue' in v) return Number(v.integerValue);
+    if ('doubleValue' in v) return v.doubleValue;
+    if ('booleanValue' in v) return v.booleanValue;
+    if ('timestampValue' in v) return v.timestampValue;
+    if ('arrayValue' in v) return (v.arrayValue.values || []).map(valorFs);
+    if ('mapValue' in v) return docFs(v.mapValue);
+    return null;
+  }
+  function docFs(d) { return Object.fromEntries(Object.entries(d.fields || {}).map(([k, v]) => [k, valorFs(v)])); }
+  const idDoc = (nombre) => nombre.split('/').pop();
+  async function mesasProximas() {
+    const r = await fetch(`${FIRESTORE}:runQuery?key=${FIREBASE_KEY}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ structuredQuery: {
+        from: [{ collectionId: 'mesas' }], orderBy: [{ field: { fieldPath: 'fecha' } }], limit: 100,
+        where: { fieldFilter: { field: { fieldPath: 'fecha' }, op: 'GREATER_THAN_OR_EQUAL', value: { timestampValue: new Date().toISOString() } } },
+      } }),
+    });
+    if (!r.ok) throw new Error(`Firestore ${r.status}`);
+    return (await r.json()).filter((x) => x.document).map((x) => ({ id: idDoc(x.document.name), ...docFs(x.document) }));
+  }
+  async function unaMesa(id) {
+    const r = await fetch(`${FIRESTORE}/mesas/${encodeURIComponent(id)}?key=${FIREBASE_KEY}`);
+    if (!r.ok) throw new Error(r.status === 404 ? 'Esa mesa no existe en la plataforma.' : `Firestore ${r.status}`);
+    const d = await r.json(); return { id: idDoc(d.name), ...docFs(d) };
+  }
+  async function cargarMesas() {
+    try {
+      const mesas = await mesasProximas();
+      mesasEstado = Object.fromEntries(mesas.map((m) => [m.id, m.estado]));
+      const anunciadas = new Set(todas.map((p) => p.mesa).filter(Boolean));
+      mesasNuevas = mesas.filter((m) => m.estado === 'abierta' && !anunciadas.has(m.id));
+    } catch (err) { console.warn('No pude leer las mesas de la plataforma', err); mesasNuevas = []; }
+    $('#mesas').hidden = !mesasNuevas.length; $('#n-mesas').textContent = mesasNuevas.length;
+    $('#mesas-lista').replaceChildren(...mesasNuevas.map((m) => {
+      const el = document.createElement('div'); el.className = 'mesa-fila';
+      const { fecha, inicio } = enBogota(m.fecha);
+      el.innerHTML = `${m.portada ? `<img alt="" loading="lazy" src="${D.esc(new URL(m.portada, WEB_BASE).href)}">` : ''}
+        <div><strong>${D.esc(m.titulo)}</strong><span class="meta">${D.esc([m.sistema, fechaLarga(fecha) + ' · ' + hora12(inicio), m.gmNombre ? 'narra ' + m.gmNombre : ''].filter(Boolean).join(' · '))}</span></div>`;
+      const b = document.createElement('button'); b.className = 'boton primario'; b.textContent = 'Preparar anuncio';
+      b.onclick = () => desdeMesa(m); el.append(b);
+      return el;
+    }));
+    pintarLista(); contarPendientes();
+  }
+  // Fecha y hora de la mesa en Bogotá → «AAAA-MM-DD» y «HH:MM»
+  function enBogota(iso, sumarHoras = 0) {
+    const d = new Date(new Date(iso).getTime() + sumarHoras * 3600e3);
+    const x = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+      .formatToParts(d).map((q) => [q.type, q.value]));
+    return { fecha: `${x.year}-${x.month}-${x.day}`, inicio: `${x.hour}:${x.minute}` };
+  }
+  async function desdeMesa(m) {
+    if (todas.some((p) => p.mesa === m.id && p.estado !== 'cancelada') && !confirmar('Esta mesa ya tiene un anuncio. ¿Preparar otro?')) return;
+    const { fecha, inicio } = enBogota(m.fecha);
+    const fin = m.duracionHoras ? enBogota(m.fecha, m.duracionHoras).inicio : '';
+    const libres = Math.max(0, (m.cupos || 0) - (m.inscritos || 0));
+    const etiquetas = m.etiquetas || [];
+    let descripcion = (m.descripcion || '').trim();
+    if (descripcion.length > 500) descripcion = descripcion.slice(0, 497).replace(/\s+\S*$/, '') + '…';
+    escribir({
+      titulo: m.titulo || '', juego: m.sistema || '', descripcion, fecha, inicio, fin,
+      cupos: libres || m.cupos || '', lugar: m.modalidad === 'online' ? 'En línea' : (m.lugar || LUGAR),
+      nivel: etiquetas.includes('principiantes') ? 'Para principiantes' : 'Todo nivel',
+      narra: m.gmNombre || '', reserva: new URL(`mesas/${m.id}`, WEB_BASE).href, cta: 'INSCRÍBETE EN LA WEB',
+    });
+    editando = null; mesaId = m.id; textoManual = false; foto = ''; mostrarFoto();
+    $('#titulo-form').textContent = 'Anuncio de mesa';
+    mostrarTab('nueva'); actualizar();
+    estado('Datos de la mesa cargados. Revisa, ajusta la imagen si quieres y pulsa «Enviar a revisión».');
+    if (m.portada) {
+      try {
+        let r = await fetch(new URL(m.portada.replace(/-800\.jpg$/, '-1600.jpg'), WEB_BASE).href);
+        if (!r.ok) r = await fetch(new URL(m.portada, WEB_BASE).href);
+        if (r.ok) { const blob = await r.blob(); await ponerFoto(new File([blob], 'portada.jpg', { type: blob.type || 'image/jpeg' })); }
+      } catch (err) { console.warn('Portada no cargada', err); }
+    }
+  }
+
   $$('[data-filtro]').forEach((b) => b.addEventListener('click', () => { filtro = b.dataset.filtro; pintarLista(); }));
   $('#b-recargar').addEventListener('click', cargarLista);
 
@@ -417,13 +515,17 @@
   /* ------------------------------------------------------------ inicio */
   (async () => {
     const b = guardado.get('borrador');
-    if (b) { escribir(b); foto = b.foto || ''; editando = b.editando || null; textoManual = !!b.textoManual; if (b.texto) $('#f-texto').value = b.texto; mostrarFoto(); if (editando) $('#titulo-form').textContent = 'Editar partida'; }
+    if (b) { escribir(b); foto = b.foto || ''; editando = b.editando || null; mesaId = b.mesaId || ''; textoManual = !!b.textoManual; if (b.texto) $('#f-texto').value = b.texto; mostrarFoto(); if (editando) $('#titulo-form').textContent = 'Editar partida'; }
     actualizar();
     await cargarFuentes(); actualizar();
     const t = location.hash.slice(1);
     mostrarTab(['nueva', 'revision', 'ajustes'].includes(t) ? t : (ajustes().token ? 'nueva' : 'nueva'));
-    if (ajustes().token) cargarLista();
-    if (t === 'revision') cargarLista();
+    const pedida = new URLSearchParams(location.search).get('mesa');
+    if (pedida) {
+      try { await desdeMesa(await unaMesa(pedida)); } catch (err) { estado('❌ ' + err.message); }
+      history.replaceState(null, '', location.pathname + '#nueva');
+    }
+    if (ajustes().token || t === 'revision') cargarLista();
   })();
   window.TPDPartidas = { WEB };
 })();

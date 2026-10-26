@@ -19,6 +19,8 @@ Publicador: **https://thetrashkat.github.io/tazon-partidas/**
 3. **Revisión → Aprobar y publicar**: en 1 o 2 minutos GitHub Actions publica en Telegram, Facebook e Instagram y actualiza la web. En la tarjeta aparece ✓ o ✗ por cada red.
 4. **Compartir en WhatsApp**: en el celular abre el menú de compartir con la imagen y el texto. Eliges el grupo, el canal o tu estado. En el computador abre WhatsApp Web con el texto y descarga la imagen.
 
+**Mesas de la plataforma.** Cuando un GM crea una mesa en la web (`/mesas`, Firebase), aparece en **Revisión → Mesas nuevas de la plataforma** hasta que tenga anuncio. **Preparar anuncio** llena el formulario con el título, el sistema, la fecha y hora (Bogotá), la duración, los cupos libres, el GM y la portada. El enlace de reserva queda apuntando a la página de inscripción de la mesa. Después se envía y se aprueba como cualquier partida, y `partida.json` guarda el id en `mesa`. Si el GM cancela la mesa, la tarjeta del anuncio muestra un aviso. También puedes abrir `?mesa=<id>` para preparar una mesa en particular.
+
 Cada partida se publica una sola vez por red. Si una red falla, se reintenta en el siguiente cambio y cada mañana, hasta 3 veces. Las partidas cuya fecha ya pasó desaparecen solas de la web.
 
 ## Configuración (una sola vez)

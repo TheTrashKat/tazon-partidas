@@ -15,7 +15,7 @@ RAIZ = pathlib.Path(__file__).resolve().parent.parent
 REPO = os.environ.get("GITHUB_REPOSITORY", "TheTrashKat/tazon-partidas")
 dueno, nombre = REPO.split("/")
 BASE = f"https://{dueno.lower()}.github.io/{nombre}/"
-CAMPOS = ("id", "titulo", "juego", "descripcion", "fecha", "inicio", "fin", "lugar", "nivel", "cupos", "narra", "reserva", "texto")
+CAMPOS = ("id", "titulo", "juego", "descripcion", "fecha", "inicio", "fin", "lugar", "nivel", "cupos", "narra", "reserva", "texto", "mesa")
 
 
 def main():
