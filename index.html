@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Publicador de partidas · Tazón para Dos</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="https://thetrashkat.github.io/tazon-para-dos-marca/assets/logo/favicon.svg" type="image/svg+xml">
+<style>
+  :root { --ink: #28203B; --coral: #EA6077; --sun: #F8CB67; --teal: #55C4BF; --cream: #F7F2E8; --paper: #FFFDF8; --muted: #665F68; --ok: #7EE5A8;
+    --dots: radial-gradient(rgba(40,32,59,.10) 1.6px, transparent 1.7px) 0 0 / 22px 22px; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: 'Barlow', system-ui, sans-serif; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; padding: 14px 20px; background: var(--teal) var(--dots); border-bottom: 4px solid var(--ink); }
+  header img { height: 46px; }
+  header h1 { font: 800 30px/1 'Barlow Condensed', sans-serif; text-transform: uppercase; margin: 0; }
+  .tabs { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+  .tabs button { font: 700 14px 'Barlow', sans-serif; letter-spacing: .08em; text-transform: uppercase; padding: 9px 16px; border: 3px solid var(--ink); border-radius: 999px; background: var(--cream); color: var(--ink); cursor: pointer; }
+  .tabs button[aria-selected=true] { background: var(--sun); box-shadow: 4px 4px 0 var(--ink); }
+  .tabs .badge { display: inline-block; min-width: 22px; padding: 0 6px; margin-left: 6px; border-radius: 999px; background: var(--coral); color: var(--ink); }
+  section[hidden] { display: none !important; }
+  /* nueva partida */
+  #nueva { display: grid; grid-template-columns: minmax(300px, 400px) 1fr; min-height: calc(100vh - 78px); }
+  .form { border-right: 3px solid var(--ink); padding: 18px; background: var(--cream); overflow-y: auto; }
+  .form h2, .panel h2 { font: 800 28px 'Barlow Condensed', sans-serif; text-transform: uppercase; margin: 0 0 4px; }
+  .form .ayuda, .ayuda { color: var(--muted); font-size: 14px; margin: 2px 0 10px; }
+  .grupo { font: 800 18px 'Barlow Condensed', sans-serif; text-transform: uppercase; margin: 20px 0 2px; padding-top: 12px; border-top: 2px dashed rgba(40,32,59,.25); }
+  label { display: block; font-weight: 700; font-size: 13px; letter-spacing: .04em; margin: 10px 0 4px; }
+  input[type=text], input[type=date], input[type=time], input[type=number], input[type=password], input[type=url], textarea, select {
+    width: 100%; font: 500 16px 'Barlow', sans-serif; padding: 8px 10px; border: 2px solid var(--ink); border-radius: 10px; background: #fff; color: var(--ink); }
+  textarea { resize: vertical; }
+  .fila { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .check { display: flex; gap: 8px; align-items: center; font-weight: 600; margin-top: 10px; }
+  .foto { border: 3px dashed var(--ink); border-radius: 14px; padding: 12px; text-align: center; background: #fff; cursor: pointer; }
+  .foto img { max-width: 100%; max-height: 140px; border-radius: 8px; display: block; margin: 0 auto 8px; }
+  .foto small { color: var(--muted); }
+  .boton { font: 700 14px 'Barlow', sans-serif; letter-spacing: .06em; text-transform: uppercase; padding: 11px 16px; border: 3px solid var(--ink); border-radius: 999px; background: #fff; color: var(--ink); cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .boton.primario { background: var(--sun); box-shadow: 5px 5px 0 var(--ink); font-size: 16px; }
+  .boton.wa { background: var(--ok); }
+  .boton.peligro { background: var(--cream); color: #8a2b3b; }
+  .boton:disabled { opacity: .5; cursor: wait; }
+  .acciones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 18px; }
+  .acciones .primario { grid-column: 1 / -1; }
+  #estado, .estado { min-height: 22px; font-size: 15px; font-weight: 600; margin-top: 12px; }
+  main.vista { padding: 22px; background: #ede8df; overflow: auto; }
+  .piezas { display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap; }
+  .pieza { flex: 1 1 300px; max-width: 460px; }
+  .pieza.h { flex: 1 1 240px; max-width: 330px; }
+  .pieza p { font: 800 18px 'Barlow Condensed', sans-serif; text-transform: uppercase; margin: 0 0 6px; }
+  .pieza svg { width: 100%; height: auto; display: block; box-shadow: 8px 8px 0 rgba(40,32,59,.3); background: #fff; }
+  .texto { margin-top: 24px; max-width: 820px; }
+  .texto textarea { font-size: 15px; min-height: 230px; }
+  /* revisión */
+  .panel { padding: 22px; max-width: 1200px; margin: 0 auto; }
+  .lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 20px; margin-top: 16px; }
+  .tarjeta { background: #fff; border: 3px solid var(--ink); border-radius: 18px; box-shadow: 6px 6px 0 var(--ink); overflow: hidden; display: flex; flex-direction: column; }
+  .tarjeta img { width: 100%; aspect-ratio: 4 / 5; object-fit: cover; display: block; border-bottom: 3px solid var(--ink); background: var(--cream); }
+  .tarjeta .cuerpo { padding: 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+  .tarjeta h3 { font: 800 24px/1 'Barlow Condensed', sans-serif; text-transform: uppercase; margin: 0; }
+  .tarjeta .meta { color: var(--muted); font-size: 14px; }
+  .tarjeta textarea { font-size: 14px; min-height: 120px; }
+  .tarjeta .botones { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+  .tarjeta .botones .boton { font-size: 12px; padding: 8px 12px; }
+  .pildora { display: inline-block; font: 700 12px 'Barlow', sans-serif; letter-spacing: .08em; text-transform: uppercase; padding: 4px 10px; border: 2px solid var(--ink); border-radius: 999px; }
+  .pildora.pendiente { background: var(--sun); } .pildora.aprobada { background: var(--teal); } .pildora.cancelada { background: var(--cream); } .pildora.pasada { background: #ddd; }
+  .redes { display: flex; flex-wrap: wrap; gap: 4px; font-size: 13px; }
+  .redes span { padding: 2px 8px; border-radius: 8px; background: var(--cream); border: 1px solid rgba(40,32,59,.3); }
+  .redes .ok { background: #d9f7e5; } .redes .error { background: #fbdde2; }
+  .filtros { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .vacio { padding: 30px; text-align: center; color: var(--muted); border: 3px dashed rgba(40,32,59,.3); border-radius: 18px; margin-top: 16px; }
+  .ajustes { max-width: 720px; }
+  .ajustes ol li { margin-bottom: 6px; }
+  code { background: var(--cream); padding: 1px 5px; border-radius: 4px; }
+  @media (max-width: 860px) {
+    #nueva { grid-template-columns: 1fr; }
+    .form { border-right: 0; border-bottom: 3px solid var(--ink); }
+    main.vista { padding: 16px; }
+    .panel { padding: 16px; }
+    .lista { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <img src="https://thetrashkat.github.io/tazon-para-dos-marca/assets/logo/logotipo-horizontal.svg" alt="Tazón para Dos">
+  <h1>Partidas</h1>
+  <div class="tabs" role="tablist">
+    <button role="tab" data-tab="nueva" aria-selected="true">Nueva partida</button>
+    <button role="tab" data-tab="revision" aria-selected="false">Revisión <span class="badge" id="n-pendientes" hidden>0</span></button>
+    <button role="tab" data-tab="ajustes" aria-selected="false">Ajustes</button>
+  </div>
+</header>
+
+<section id="nueva">
+  <form class="form" id="form" autocomplete="off">
+    <h2 id="titulo-form">Nueva partida</h2>
+    <p class="ayuda">Llena los datos y mira cómo quedan el post y la historia. Puedes pegar una imagen con Ctrl+V.</p>
+
+    <div class="grupo">La partida</div>
+    <label for="f-titulo">Nombre de la partida</label>
+    <input type="text" id="f-titulo" name="titulo" required placeholder="La cripta bajo el humedal.">
+    <label for="f-juego">Juego o sistema</label>
+    <input type="text" id="f-juego" name="juego" list="juegos" placeholder="Dungeons & Dragons 5e">
+    <datalist id="juegos"><option>Dungeons & Dragons 5e</option><option>Mago: La Ascensión</option><option>Vampiro: La Mascarada</option><option>Hombre Lobo: El Apocalipsis</option><option>La Llamada de Cthulhu</option><option>Pathfinder</option><option>Mythos</option><option>Juego de rol</option></datalist>
+    <label for="f-descripcion">Descripción (va en el texto de redes y en la web, no en la imagen)</label>
+    <textarea id="f-descripcion" name="descripcion" rows="3" placeholder="Una expedición a las ruinas que aparecieron tras la lluvia…"></textarea>
+
+    <div class="grupo">Cuándo y dónde</div>
+    <div class="fila">
+      <div><label for="f-fecha">Fecha</label><input type="date" id="f-fecha" name="fecha" required></div>
+      <div><label for="f-cupos">Cupos</label><input type="number" id="f-cupos" name="cupos" min="1" max="99" value="5"></div>
+    </div>
+    <div class="fila">
+      <div><label for="f-inicio">Empieza</label><input type="time" id="f-inicio" name="inicio" value="14:00" required></div>
+      <div><label for="f-fin">Termina (opcional)</label><input type="time" id="f-fin" name="fin" value="18:00"></div>
+    </div>
+    <label for="f-lugar">Lugar</label>
+    <input type="text" id="f-lugar" name="lugar">
+
+    <div class="grupo">Para quién</div>
+    <label for="f-nivel">Nivel</label>
+    <select id="f-nivel" name="nivel">
+      <option>Para principiantes</option><option>Todo nivel</option><option>Con experiencia</option><option value="">(no mostrar)</option>
+    </select>
+    <label for="f-narra">Quién narra (opcional)</label>
+    <input type="text" id="f-narra" name="narra" placeholder="Nombre o apodo, solo si da permiso">
+    <label for="f-reserva">Enlace para reservar</label>
+    <input type="url" id="f-reserva" name="reserva">
+    <label for="f-cta">Texto del botón</label>
+    <input type="text" id="f-cta" name="cta" value="ESCRÍBENOS PARA RESERVAR">
+
+    <div class="grupo">Imagen y color</div>
+    <div class="foto" id="foto" tabindex="0" role="button" aria-label="Elegir imagen">
+      <img id="foto-prev" alt="" hidden>
+      <b id="foto-txt">Elegir o pegar imagen (opcional)</b><br>
+      <small>Sin imagen se usa la hoja de calendario. Si se ven caras, pide permiso a cada persona antes de publicar.</small>
+      <input type="file" id="f-foto" accept="image/*" hidden>
+    </div>
+    <div class="fila">
+      <div><label for="f-enfoque">Enfoque</label><select id="f-enfoque" name="enfoque"><option value="centro">Centro</option><option value="arriba">Arriba</option><option value="abajo">Abajo</option><option value="izquierda">Izquierda</option><option value="derecha">Derecha</option></select></div>
+      <div><label for="f-receta">Color</label><select id="f-receta" name="receta"></select></div>
+    </div>
+    <label class="check"><input type="checkbox" id="f-invertir" name="invertir"> Invertir colores (fondo tinta)</label>
+    <label class="check"><input type="checkbox" id="f-quitar" > Quitar la imagen</label>
+
+    <div class="acciones">
+      <button type="submit" class="boton primario" id="b-enviar">Enviar a revisión ↗</button>
+      <button type="button" class="boton" id="b-descargar">Descargar imágenes</button>
+      <button type="button" class="boton wa" id="b-wa">Compartir</button>
+      <button type="button" class="boton" id="b-limpiar" style="grid-column:1/-1">Empezar de nuevo</button>
+    </div>
+    <div id="estado" role="status"></div>
+  </form>
+
+  <main class="vista">
+    <div class="piezas">
+      <div class="pieza"><p>Post 4:5 · Instagram, Facebook, Telegram, WhatsApp</p><div id="prev-post"></div></div>
+      <div class="pieza h"><p>Historia 9:16 · Instagram, estado de WhatsApp</p><div id="prev-historia"></div></div>
+    </div>
+    <div class="texto">
+      <label for="f-texto">Texto que acompaña la publicación <small>(se arma solo; puedes editarlo; si cambias los datos de arriba se vuelve a armar)</small></label>
+      <textarea id="f-texto"></textarea>
+    </div>
+  </main>
+</section>
+
+<section id="revision" class="panel" hidden>
+  <h2>Revisión</h2>
+  <p class="ayuda">Las partidas pendientes no salen a ninguna red hasta que las apruebes. Al aprobar, GitHub publica en Telegram, Facebook e Instagram en 1 o 2 minutos y actualiza la web.</p>
+  <div class="filtros">
+    <button class="boton" data-filtro="pendiente">Pendientes</button>
+    <button class="boton" data-filtro="aprobada">Aprobadas</button>
+    <button class="boton" data-filtro="todas">Todas</button>
+    <button class="boton" id="b-recargar">↻ Recargar</button>
+  </div>
+  <div class="estado" id="estado-rev" role="status"></div>
+  <div class="lista" id="lista"></div>
+</section>
+
+<section id="ajustes" class="panel ajustes" hidden>
+  <h2>Ajustes de este navegador</h2>
+  <p class="ayuda">Para enviar y aprobar partidas este navegador necesita un token de GitHub. Solo se guarda aquí; nunca se sube al repositorio.</p>
+  <label for="a-repo">Repositorio</label>
+  <input type="text" id="a-repo" placeholder="TheTrashKat/tazon-partidas">
+  <label for="a-token">Token de GitHub</label>
+  <input type="password" id="a-token" placeholder="github_pat_…">
+  <div class="acciones"><button class="boton primario" id="b-guardar-ajustes">Guardar y probar</button></div>
+  <div class="estado" id="estado-ajustes" role="status"></div>
+  <h3>Cómo crear el token (una sola vez)</h3>
+  <ol>
+    <li>Entra a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com → Settings → Fine-grained tokens → Generate new token</a>.</li>
+    <li>Nombre: <code>Publicador de partidas</code>. Vencimiento: el que prefieras, por ejemplo 1 año.</li>
+    <li><b>Repository access → Only select repositories</b> → <code>tazon-partidas</code>.</li>
+    <li><b>Permissions → Repository permissions → Contents: Read and write</b>. Nada más.</li>
+    <li>Genera el token, cópialo y pégalo arriba.</li>
+  </ol>
+  <p class="ayuda">Cada persona del equipo puede tener su propio token. Si un teléfono se pierde, borra ese token en GitHub y listo.</p>
+</section>
+
+<script src="https://thetrashkat.github.io/tazon-para-dos-marca/editor/brand-data.js"></script>
+<script src="https://thetrashkat.github.io/tazon-para-dos-marca/editor/primitives.js"></script>
+<script src="https://thetrashkat.github.io/tazon-para-dos-marca/editor/templates.js"></script>
+<script src="publicador.js"></script>
+</body>
+</html>
