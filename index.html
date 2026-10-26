@@ -80,7 +80,10 @@
   .filtros { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .vacio { padding: 30px; text-align: center; color: var(--muted); border: 3px dashed rgba(40,32,59,.3); border-radius: 18px; margin-top: 16px; }
   .ajustes { max-width: 720px; }
-  .ajustes ol li { margin-bottom: 6px; }
+  .ajustes li { margin-bottom: 6px; }
+  .sesion { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
+  .sesion img { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--ink); vertical-align: middle; margin-right: 8px; }
+  details { margin-top: 18px; }
   code { background: var(--cream); padding: 1px 5px; border-radius: 4px; }
   @media (max-width: 860px) {
     #nueva { grid-template-columns: 1fr; }
@@ -177,7 +180,7 @@
 
 <section id="revision" class="panel" hidden>
   <h2>Revisión</h2>
-  <p class="ayuda">Las partidas pendientes no salen a ninguna red hasta que las apruebes. Al aprobar, GitHub publica en Telegram, Facebook e Instagram en 1 o 2 minutos y actualiza la web.</p>
+  <p class="ayuda">Los anuncios pendientes no salen a ninguna red hasta que los apruebes. Al aprobar se publican en Telegram, Facebook e Instagram en menos de un minuto; si alguna red falla, se reintenta sola cada 10 minutos.</p>
   <div class="filtros">
     <button class="boton" data-filtro="pendiente">Pendientes</button>
     <button class="boton" data-filtro="aprobada">Aprobadas</button>
@@ -194,28 +197,31 @@
 </section>
 
 <section id="ajustes" class="panel ajustes" hidden>
-  <h2>Ajustes de este navegador</h2>
-  <p class="ayuda">Para enviar y aprobar partidas este navegador necesita un token de GitHub. Solo se guarda aquí; nunca se sube al repositorio.</p>
-  <label for="a-repo">Repositorio</label>
-  <input type="text" id="a-repo" placeholder="TheTrashKat/tazon-partidas">
-  <label for="a-token">Token de GitHub</label>
-  <input type="password" id="a-token" placeholder="github_pat_…">
-  <div class="acciones"><button class="boton primario" id="b-guardar-ajustes">Guardar y probar</button></div>
+  <h2>Cuenta</h2>
+  <p class="ayuda">Entra con la misma cuenta de Google de la plataforma de mesas. Para enviar y aprobar anuncios tu perfil debe ser de administración.</p>
+  <div class="sesion">
+    <div id="sesion-info">Sin sesión.</div>
+    <button class="boton primario" id="b-entrar">Entrar con Google</button>
+    <button class="boton" id="b-salir" hidden>Cerrar sesión</button>
+  </div>
   <div class="estado" id="estado-ajustes" role="status"></div>
-  <h3>Cómo crear el token (una sola vez)</h3>
-  <ol>
-    <li>Entra a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com → Settings → Fine-grained tokens → Generate new token</a>.</li>
-    <li>Nombre: <code>Publicador de partidas</code>. Vencimiento: el que prefieras, por ejemplo 1 año.</li>
-    <li><b>Repository access → Only select repositories</b> → <code>tazon-partidas</code>.</li>
-    <li><b>Permissions → Repository permissions → Contents: Read and write</b>. Nada más.</li>
-    <li>Genera el token, cópialo y pégalo arriba.</li>
-  </ol>
-  <p class="ayuda">Cada persona del equipo puede tener su propio token. Si un teléfono se pierde, borra ese token en GitHub y listo.</p>
+  <h3>Dónde queda todo</h3>
+  <ul>
+    <li><b>Mesas y anuncios:</b> Firebase (proyecto <code>tazon-para-dos</code>, colecciones <code>mesas</code> y <code>anuncios</code>).</li>
+    <li><b>Imágenes:</b> carpeta <a id="enlace-carpeta" href="#" target="_blank" rel="noopener">Tazón para Dos · Mesas</a> en Google Drive (subcarpetas Portadas y Anuncios).</li>
+    <li><b>Publicación en redes:</b> el script de Apps Script de esa misma cuenta publica al aprobar y revisa cada 10 minutos lo que falte.</li>
+  </ul>
+  <details>
+    <summary>Avanzado</summary>
+    <label for="a-servidor">Dirección del script (Apps Script)</label>
+    <input type="url" id="a-servidor" placeholder="https://script.google.com/macros/s/…/exec">
+    <div class="acciones"><button class="boton" id="b-guardar-ajustes">Guardar y probar</button></div>
+  </details>
 </section>
 
 <script src="https://thetrashkat.github.io/tazon-para-dos-marca/editor/brand-data.js"></script>
 <script src="https://thetrashkat.github.io/tazon-para-dos-marca/editor/primitives.js"></script>
 <script src="https://thetrashkat.github.io/tazon-para-dos-marca/editor/templates.js"></script>
-<script src="publicador.js"></script>
+<script type="module" src="publicador.js"></script>
 </body>
 </html>

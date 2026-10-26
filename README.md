@@ -1,38 +1,57 @@
 # Publicador de partidas · Tazón para Dos
 
-Una página para anunciar partidas de rol. Llenas los datos una vez y la partida sale con la marca de Tazón en:
+Una página para anunciar mesas y partidas de rol. Llenas los datos una vez, o los trae una mesa de la plataforma, y el anuncio sale con la marca de Tazón en:
 
 | Dónde | Cómo |
 |---|---|
 | Telegram (canal y grupo) | automático, con un bot |
 | Facebook (Página) | automático, API de Meta |
 | Instagram (post + historia) | automático, API de Meta |
-| Web de Tazón (sección «Próximas partidas») | automático, lee `partidas.json` |
 | WhatsApp (grupo, canal, estado) | **semiautomático**: botón «Compartir» con imagen y texto listos (WhatsApp no permite publicar por API en grupos ni canales) |
 
 Publicador: **https://thetrashkat.github.io/tazon-partidas/**
 
+## Dónde vive cada cosa
+
+| Qué | Dónde |
+|---|---|
+| Mesas (las crean los GMs en la web) | Firebase, colección `mesas` |
+| Anuncios: datos, estado (`pendiente` → `aprobada` / `cancelada`), texto para redes y resultado por red (`publicado`) | Firebase, colección `anuncios` |
+| Imágenes: portadas de los GMs, post 4:5 e historia 9:16 | Google Drive, carpeta **Tazón para Dos · Mesas** |
+| Publicación en redes y reintentos | Script de Apps Script de la misma cuenta del Drive (`apps-script/`) |
+| Esta página | GitHub Pages (este repo) |
+
+En GitHub no queda ningún dato ni ninguna clave.
+
 ## Cómo se usa
 
-1. **Nueva partida**: nombre, juego, fecha, hora, cupos y nivel. Si quieres, pega una imagen (Ctrl+V). A la derecha ves el post 4:5, la historia 9:16 y el texto para redes, que puedes editar.
-2. **Enviar a revisión**: sube `partidas/<fecha>-<nombre>/` con `partida.json`, `post.jpg` e `historia.jpg`. Todavía no sale a ninguna red.
-3. **Revisión → Aprobar y publicar**: en 1 o 2 minutos GitHub Actions publica en Telegram, Facebook e Instagram y actualiza la web. En la tarjeta aparece ✓ o ✗ por cada red.
-4. **Compartir en WhatsApp**: en el celular abre el menú de compartir con la imagen y el texto. Eliges el grupo, el canal o tu estado. En el computador abre WhatsApp Web con el texto y descarga la imagen.
+1. **Ajustes → Entrar con Google**, con tu cuenta de administración de la plataforma.
+2. **Nueva partida**: nombre, juego, fecha, hora, cupos y nivel. Si quieres, pega una imagen (Ctrl+V). A la derecha ves el post 4:5, la historia 9:16 y el texto para redes, que puedes editar.
+3. **Enviar a revisión**: sube el post y la historia a Drive y guarda el anuncio en Firebase. Todavía no sale a ninguna red.
+4. **Revisión → Aprobar y publicar**: el script publica en Telegram, Facebook e Instagram en menos de un minuto. En la tarjeta aparece ✓ o ✗ por cada red.
+5. **Compartir en WhatsApp**: en el celular abre el menú de compartir con la imagen y el texto. Eliges el grupo, el canal o tu estado. En el computador abre WhatsApp Web con el texto y descarga la imagen.
 
-**Mesas de la plataforma.** Cuando un GM crea una mesa en la web (`/mesas`, Firebase), aparece en **Revisión → Mesas nuevas de la plataforma** hasta que tenga anuncio. **Preparar anuncio** llena el formulario con el título, el sistema, la fecha y hora (Bogotá), la duración, los cupos libres, el GM y la portada. El enlace de reserva queda apuntando a la página de inscripción de la mesa. Después se envía y se aprueba como cualquier partida, y `partida.json` guarda el id en `mesa`. Si el GM cancela la mesa, la tarjeta del anuncio muestra un aviso. También puedes abrir `?mesa=<id>` para preparar una mesa en particular.
+**Mesas de la plataforma.** Cuando un GM crea una mesa en la web (`/mesas`), aparece en **Revisión → Mesas nuevas de la plataforma** hasta que tenga anuncio. **Preparar anuncio** llena el formulario con estos datos de la mesa:
+- título, sistema, fecha y hora (Bogotá) y duración;
+- cupos libres, el GM y la portada;
+- el enlace de reserva, que apunta a la página de inscripción de la mesa.
 
-Cada partida se publica una sola vez por red. Si una red falla, se reintenta en el siguiente cambio y cada mañana, hasta 3 veces. Las partidas cuya fecha ya pasó desaparecen solas de la web.
+El anuncio guarda el id en `mesa`. Si el GM cancela la mesa, la tarjeta del anuncio muestra un aviso. También puedes abrir `?mesa=<id>` para preparar una mesa en particular.
+
+Cada anuncio se publica una sola vez por red. Si una red falla, el script la reintenta cada 10 minutos, hasta 3 veces. Los anuncios cuya fecha ya pasó no se publican.
 
 ## Configuración (una sola vez)
 
-En GitHub: **Settings → Secrets and variables → Actions**. Los *secrets* van cifrados. Las *variables* son datos que no son secretos.
+1. **Script de Apps Script:** sigue [apps-script/LEEME.md](apps-script/LEEME.md) (instalar, implementar como aplicación web y copiar la URL).
+2. **Reglas de Firestore:** las reglas de la colección `anuncios` están en `firestore.rules` del proyecto de la web. Pégalas en *Firebase → Firestore → Reglas*.
+3. **Redes:** sus claves van en las *Propiedades del script* (tabla en el LEEME). Una red sin sus datos se salta, así que puedes empezar solo con Telegram.
 
 ### Telegram
 
 1. En Telegram, habla con **@BotFather** → `/newbot` → nombre `Tazón para Dos` → copia el token.
 2. Agrega el bot como **administrador** del canal (con permiso de publicar) y como miembro del grupo.
-3. Secret `TELEGRAM_BOT_TOKEN` = el token.
-4. Variable `TELEGRAM_CHATS` = los destinos separados por coma:
+3. Propiedad `TELEGRAM_BOT_TOKEN` = el token.
+4. Propiedad `TELEGRAM_CHATS` = los destinos separados por coma:
    - el canal público: `@nombre_del_canal`;
    - el grupo, con su id numérico (`-100…`). Para verlo, escribe algo en el grupo y abre `https://api.telegram.org/bot<TOKEN>/getUpdates`.
 
@@ -48,32 +67,17 @@ Pasos:
 3. Cambia ese token por uno de **larga duración** con el Depurador de tokens («Extender token de acceso»).
 4. Con ese token consulta `GET /me/accounts`. Ahí aparece el **token de la Página**, que no vence, y el **id de la Página**.
 5. Consulta `GET /<id de la Página>?fields=instagram_business_account`. Ahí aparece el **id de Instagram**.
-6. Guárdalos en GitHub:
-   - secret `META_PAGE_TOKEN` = token de la Página;
-   - variable `FB_PAGE_ID` = id de la Página;
-   - variable `IG_USER_ID` = id de Instagram.
-
-Opcionales:
-- `IG_HISTORIA=0`: no publica la historia.
-- `GRAPH_VERSION`: por defecto `v25.0`.
-- `DRY_RUN=1`: modo ensayo, que muestra en el registro qué publicaría y no publica nada.
-
-Una red sin sus datos simplemente se salta. Puedes empezar solo con Telegram.
-
-### Quién puede enviar y aprobar
-
-Cada persona del equipo crea un **token de GitHub de grano fino** que solo tiene acceso al repo `tazon-partidas` con permiso *Contents: Read and write*. Lo pega en la pestaña **Ajustes** del publicador. Se guarda solo en ese navegador. Los pasos están en la misma pestaña.
+6. Guárdalos como propiedades del script:
+   - `META_PAGE_TOKEN` = token de la Página;
+   - `FB_PAGE_ID` = id de la Página;
+   - `IG_USER_ID` = id de Instagram.
 
 ## Archivos
 
 | Archivo | Qué hace |
 |---|---|
-| `index.html`, `publicador.js` | La página. Dibuja con las plantillas `partida_post` / `partida_historia` del [kit de marca](https://github.com/TheTrashKat/tazon-para-dos-marca), cargadas desde su GitHub Pages |
-| `partidas/<id>/partida.json` | Datos, estado (`pendiente` → `aprobada` / `cancelada`), texto para redes y resultado por red (`publicado`) |
-| `tools/publicar.py` | Publica en Telegram, Facebook e Instagram (solo biblioteca estándar) |
-| `tools/indice.py` | Genera `partidas.json` para la web |
-| `.github/workflows/publicar.yml` | Corre los dos scripts, guarda resultados y despliega GitHub Pages |
-
-Para un ensayo local sin publicar nada: `DRY_RUN=1 python -I tools/publicar.py`.
+| `index.html`, `publicador.js` | La página. Dibuja con las plantillas `partida_post` / `partida_historia` del [kit de marca](https://github.com/TheTrashKat/tazon-para-dos-marca), cargadas desde su GitHub Pages. Usa Firebase (sesión y anuncios) y el script (imágenes y publicación) |
+| `apps-script/Codigo.gs`, `appsscript.json` | El script: guarda imágenes en Drive, publica en redes y reintenta cada 10 minutos |
+| `.github/workflows/pages.yml` | Publica esta página en GitHub Pages |
 
 **Privacidad:** la foto original no se sube, solo las piezas ya armadas. Este es un espacio seguro LGBTI+: no publiques caras ni nombres sin permiso explícito.

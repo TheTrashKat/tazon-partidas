@@ -1,20 +1,32 @@
-'use strict';
 /* Publicador de partidas · Tazón para Dos
    - Dibuja el post (4:5) y la historia (9:16) con las plantillas «partida_post» y «partida_historia» del kit de marca.
-   - «Enviar a revisión» sube partida.json + post.jpg + historia.jpg en un solo commit a partidas/<id>/ (estado: pendiente).
-   - «Aprobar» cambia el estado a «aprobada»; la acción de GitHub (.github/workflows/publicar.yml) publica en
-     Telegram, Facebook e Instagram, guarda el resultado en partida.json y actualiza partidas.json para la web.
+   - «Enviar a revisión» sube las dos imágenes a Google Drive (por el script de Apps Script, apps-script/Codigo.gs)
+     y guarda el anuncio en Firestore («anuncios/<id>», estado: pendiente).
+   - «Aprobar» cambia el estado a «aprobada» y le pide al script que publique en Telegram, Facebook e Instagram;
+     el script guarda el resultado por red en el anuncio y reintenta solo cada 10 minutos.
    - WhatsApp no permite publicar por API en grupos ni canales: «Compartir» abre el menú del teléfono con la imagen y el texto.
-   - Las mesas que los GMs crean en la plataforma (Firestore, lectura pública) aparecen en «Revisión» hasta que tengan
-     anuncio; «Preparar anuncio» (o ?mesa=<id> en la URL) llena el formulario. La partida guarda «mesa» con su id. */
+   - Las mesas que los GMs crean en la plataforma aparecen en «Revisión» hasta que tengan anuncio; «Preparar anuncio»
+     (o ?mesa=<id> en la URL) llena el formulario. El anuncio guarda «mesa» con su id. */
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
+import { GoogleAuthProvider, getAuth, onAuthStateChanged, signInWithPopup, signOut } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
+import {
+  collection, doc, getDoc, getDocs, getFirestore, query, setDoc, updateDoc, where,
+} from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
+
 (function () {
   const KIT = 'https://thetrashkat.github.io/tazon-para-dos-marca/';
-  const REPO_DEF = 'TheTrashKat/tazon-partidas';
+  // Script de Apps Script (cuenta dueña del Drive). Se puede cambiar en «Ajustes → Avanzado».
+  const SERVIDOR_DEF = '';
   const WEB_BASE = 'https://thetrashkat.github.io/tazon-para-dos-web/';
   const WEB = WEB_BASE + '#partidas';
   // Proyecto de Firebase de la plataforma de mesas (valores públicos; la seguridad la dan las reglas de Firestore)
   const FIRESTORE = 'https://firestore.googleapis.com/v1/projects/tazon-para-dos/databases/(default)/documents';
   const FIREBASE_KEY = 'AIzaSyBDE5_lvYBKD8MYAXAimF7QF_SH5QxH36E';
+  const app = initializeApp({
+    apiKey: FIREBASE_KEY, authDomain: 'tazon-para-dos.firebaseapp.com', projectId: 'tazon-para-dos',
+    storageBucket: 'tazon-para-dos.firebasestorage.app', messagingSenderId: '603001960201', appId: '1:603001960201:web:c177e78caf2cb0012685d8',
+  });
+  const auth = getAuth(app), db = getFirestore(app);
   const D = window.TPDDraw, T = window.TPD;
   const PLANTILLA = { post: byId('partida_post'), historia: byId('partida_historia') };
   const $ = (s, el = document) => el.querySelector(s);
@@ -78,7 +90,7 @@
   /* ------------------------------------------------------------ formulario */
   const form = $('#form');
   const campos = ['titulo', 'juego', 'descripcion', 'fecha', 'cupos', 'inicio', 'fin', 'lugar', 'nivel', 'narra', 'reserva', 'cta', 'enfoque', 'receta', 'invertir'];
-  let foto = '';          // data URL reducida (no se sube al repo: solo se usa para dibujar)
+  let foto = '';          // data URL reducida (la foto original no se sube: solo se usa para dibujar)
   let editando = null;    // { id, sha } cuando se edita una partida existente
   let textoManual = false;
   let mesaId = '';        // mesa de la plataforma de la que sale esta partida
@@ -241,36 +253,36 @@
   });
   function confirmar(msg) { return window.confirm(msg); }
 
-  /* ------------------------------------------------------------ GitHub */
-  const ajustes = () => ({ repo: guardado.get('repo', REPO_DEF) || REPO_DEF, token: guardado.get('token', '') });
-  async function gh(ruta, opts = {}) {
-    const { repo, token } = ajustes();
-    if (!token) throw new Error('Falta el token: ve a «Ajustes».');
-    const r = await fetch(`https://api.github.com/repos/${repo}${ruta}`, {
-      ...opts, headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28', ...(opts.headers || {}) },
-    });
-    if (!r.ok) {
-      let m = ''; try { m = (await r.json()).message; } catch { /* nada */ }
-      if (r.status === 401) m = 'token inválido o vencido';
-      if (r.status === 403 || r.status === 404) m = m + ' (¿el token tiene permiso «Contents: Read and write» en este repo?)';
-      throw new Error(`GitHub ${r.status}: ${m}`);
-    }
-    return r.status === 204 ? null : r.json();
+  /* ------------------------------------------------------------ sesión y servidor */
+  let perfil = null; // { uid, nombre, foto, esAdmin }
+  const servidorUrl = () => guardado.get('servidor', '') || SERVIDOR_DEF;
+  function exigirAdmin() {
+    if (!perfil) throw new Error('Entra con tu cuenta en «Ajustes».');
+    if (!perfil.esAdmin) throw new Error('Tu cuenta no es de administración.');
+    if (!servidorUrl()) throw new Error('Falta la dirección del script en «Ajustes → Avanzado».');
+  }
+  async function servidor(accion, datos) {
+    const idToken = await auth.currentUser.getIdToken();
+    // text/plain evita la consulta previa de CORS, que Apps Script no responde
+    const r = await fetch(servidorUrl(), { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ accion, idToken, ...datos }) });
+    const j = await r.json().catch(() => ({ ok: false, error: `El script respondió ${r.status}` }));
+    if (!j.ok) throw new Error(j.error || 'El script no respondió bien.');
+    return j;
   }
   const blobB64 = async (blob) => b64(new Uint8Array(await blob.arrayBuffer()));
-  // Un solo commit con varios archivos (API de datos de git)
-  async function commit(archivos, mensaje) {
-    const ref = await gh('/git/ref/heads/main');
-    const padre = await gh(`/git/commits/${ref.object.sha}`);
-    const arbol = [];
-    for (const [ruta, contenido] of Object.entries(archivos)) {
-      const b = await gh('/git/blobs', { method: 'POST', body: JSON.stringify(contenido instanceof Blob ? { content: await blobB64(contenido), encoding: 'base64' } : { content: contenido, encoding: 'utf-8' }) });
-      arbol.push({ path: ruta, mode: '100644', type: 'blob', sha: b.sha });
-    }
-    const tree = await gh('/git/trees', { method: 'POST', body: JSON.stringify({ base_tree: padre.tree.sha, tree: arbol }) });
-    const c = await gh('/git/commits', { method: 'POST', body: JSON.stringify({ message: mensaje, tree: tree.sha, parents: [ref.object.sha] }) });
-    await gh('/git/refs/heads/main', { method: 'PATCH', body: JSON.stringify({ sha: c.sha }) });
-    return c.sha;
+  async function subirImagen(blob, tipo, nombre, reemplaza) {
+    const r = await servidor('subir', { tipo, nombre, mime: blob.type || 'image/jpeg', datos: await blobB64(blob), reemplaza: reemplaza || '' });
+    return { id: r.id, url: r.url };
+  }
+  // Imágenes de Drive: si el navegador no deja leerlas directo (CORS), se piden al script
+  const idDrive = (url) => (String(url).match(/googleusercontent\.com\/d\/([\w-]+)/) || [])[1];
+  async function blobDe(url) {
+    try { const r = await fetch(url); if (r.ok) return await r.blob(); } catch { /* CORS: se intenta por el script */ }
+    const id = idDrive(url);
+    if (!id || !servidorUrl()) throw new Error('No pude descargar la imagen.');
+    const j = await (await fetch(`${servidorUrl()}?imagen=${encodeURIComponent(id)}`)).json();
+    if (!j.ok) throw new Error(j.error);
+    return new Blob([Uint8Array.from(atob(j.datos), (c) => c.charCodeAt(0))], { type: j.mime });
   }
 
   form.addEventListener('submit', async (e) => {
@@ -280,62 +292,55 @@
     if (p.fecha < hoyIso()) return estado('La fecha ya pasó.');
     const b = $('#b-enviar'); b.disabled = true;
     try {
+      exigirAdmin();
       estado('Dibujando las piezas…');
       const pz = await piezas();
-      const id = editando?.id || idPartida(p);
+      let id = editando?.id || idPartida(p);
+      if (!editando) for (let n = 2; (await getDoc(doc(db, 'anuncios', id))).exists(); n++) id = `${idPartida(p)}-${n}`;
       const previo = editando?.datos || {};
+      estado('Subiendo las imágenes a Drive…');
+      const imagenes = {
+        post: await subirImagen(pz.post, 'post', `${id}-post.jpg`, previo.imagenes?.post?.id),
+        historia: await subirImagen(pz.historia, 'historia', `${id}-historia.jpg`, previo.imagenes?.historia?.id),
+      };
       const partida = {
         id, estado: 'pendiente', creada: previo.creada || new Date().toISOString(), actualizada: new Date().toISOString(),
+        autor: perfil.uid,
         titulo: p.titulo, juego: p.juego, descripcion: p.descripcion, fecha: p.fecha, inicio: p.inicio, fin: p.fin, lugar: p.lugar,
         nivel: p.nivel, cupos: p.cupos, narra: p.narra, reserva: p.reserva, texto: $('#f-texto').value,
         mesa: mesaId || previo.mesa || '',
         diseno: { receta: p.receta, invertir: p.invertir, enfoque: p.enfoque, cta: p.cta, con_imagen: !!foto },
-        imagenes: { post: 'post.jpg', historia: 'historia.jpg' },
-        publicado: previo.publicado || {},
+        imagenes,
       };
-      if (previo.estado === 'aprobada' && Object.keys(partida.publicado).length) partida.estado = 'aprobada'; // ya salió: solo se corrige la web
-      estado('Subiendo a GitHub…');
-      await commit({
-        [`partidas/${id}/partida.json`]: JSON.stringify(partida, null, 2) + '\n',
-        [`partidas/${id}/post.jpg`]: pz.post, [`partidas/${id}/historia.jpg`]: pz.historia,
-      }, `${editando ? 'Actualiza' : 'Nueva'} partida: ${p.titulo} (${p.fecha})`);
+      if (!editando) partida.publicado = {};
+      // Ya salió en alguna red: sigue aprobada (no se vuelve a publicar donde ya está)
+      if (previo.estado === 'aprobada' && Object.values(previo.publicado || {}).some((r) => r?.ok)) partida.estado = 'aprobada';
+      estado('Guardando en Firebase…');
+      await setDoc(doc(db, 'anuncios', id), partida, { merge: true }); // merge: no pisa «publicado», que escribe el script
       guardado.del('borrador'); editando = null; mesaId = '';
-      estado(partida.estado === 'aprobada' ? '✅ Partida actualizada en la web. Las redes no se vuelven a publicar.' : '✅ Enviada a revisión. Apruébala en la pestaña «Revisión» para publicarla.');
+      estado(partida.estado === 'aprobada' ? '✅ Anuncio actualizado. Las redes donde ya salió no se vuelven a publicar.' : '✅ Enviado a revisión. Apruébalo en la pestaña «Revisión» para publicarlo.');
       $('#titulo-form').textContent = 'Nueva partida';
       cargarLista();
     } catch (err) { estado('❌ ' + err.message); } finally { b.disabled = false; }
   });
 
   /* ------------------------------------------------------------ revisión */
-  let filtro = 'pendiente', todas = [], shaMain = 'main';
+  let filtro = 'pendiente', todas = [];
   const REDES = { telegram: 'Telegram', facebook: 'Facebook', instagram: 'Instagram', instagram_historia: 'IG historia' };
   async function cargarLista() {
-    const { repo, token } = ajustes();
     estado('Cargando…', '#estado-rev');
     try {
-      let rutas;
-      if (token) {
-        const ref = await gh('/git/ref/heads/main'); shaMain = ref.object.sha;
-        const arbol = await gh(`/git/trees/${shaMain}?recursive=1`);
-        rutas = arbol.tree.filter((x) => /^partidas\/[^/]+\/partida\.json$/.test(x.path));
-        todas = await Promise.all(rutas.map(async (x) => {
-          const b = await gh(`/git/blobs/${x.sha}`);
-          return { ...JSON.parse(textoDeB64(b.content)), _sha: x.sha };
-        }));
-      } else {
-        // Sin token: solo lectura desde el índice publicado (sin pendientes)
-        const r = await fetch(`https://${repo.split('/')[0].toLowerCase()}.github.io/${repo.split('/')[1]}/partidas.json?t=${Date.now()}`);
-        todas = r.ok ? (await r.json()).partidas : [];
-        shaMain = 'main';
-      }
+      // Sin cuenta de administración solo se pueden leer los aprobados
+      const q = perfil?.esAdmin ? collection(db, 'anuncios') : query(collection(db, 'anuncios'), where('estado', '==', 'aprobada'));
+      todas = (await getDocs(q)).docs.map((d) => ({ ...d.data(), id: d.id }));
       todas.sort((a, b) => (a.fecha + a.inicio).localeCompare(b.fecha + b.inicio));
       contarPendientes();
-      estado(token ? '' : 'Sin token solo se ven las partidas aprobadas. Agrega tu token en «Ajustes».', '#estado-rev');
+      estado(perfil?.esAdmin ? '' : 'Entra con tu cuenta de administración en «Ajustes» para ver los pendientes.', '#estado-rev');
       pintarLista();
     } catch (err) { estado('❌ ' + err.message, '#estado-rev'); }
     await cargarMesas();
   }
-  const urlImagen = (p, cual) => `https://raw.githubusercontent.com/${ajustes().repo}/${shaMain}/partidas/${p.id}/${p.imagenes?.[cual] || cual + '.jpg'}`;
+  const urlImagen = (p, cual) => p.imagenes?.[cual]?.url || '';
   function pintarLista() {
     $$('[data-filtro]').forEach((b) => b.classList.toggle('primario', b.dataset.filtro === filtro));
     const hoy = hoyIso();
@@ -366,33 +371,36 @@
     if (p.estado === 'pendiente') {
       boton('Aprobar y publicar ↗', 'primario', async () => {
         if (!confirmar(`¿Publicar «${p.titulo}» en Telegram, Facebook e Instagram?`)) return;
-        await guardarEstado(p, { estado: 'aprobada', texto: $('[data-texto]', el).value, aprobada: new Date().toISOString() }, `Aprueba partida: ${p.titulo}`);
-        st.textContent = '✅ Aprobada. GitHub la publica en 1 o 2 minutos.'; setTimeout(cargarLista, 1500);
+        exigirAdmin();
+        await guardarEstado(p, { estado: 'aprobada', texto: $('[data-texto]', el).value, aprobada: new Date().toISOString() });
+        st.textContent = 'Publicando…';
+        const r = await servidor('publicar', { anuncioId: p.id });
+        const redes = Object.entries(r.publicado || {}).filter(([k]) => !k.startsWith('_'));
+        st.textContent = r.publicado?._aviso ? '✅ Aprobado. ' + r.publicado._aviso
+          : `✅ Aprobado. ${redes.filter(([, x]) => x.ok).length} de ${redes.length} redes publicadas.`;
+        setTimeout(cargarLista, 1500);
       });
-      boton('Guardar texto', '', async () => { await guardarEstado(p, { texto: $('[data-texto]', el).value }, `Texto de partida: ${p.titulo}`); st.textContent = '✅ Texto guardado.'; });
+      boton('Guardar texto', '', async () => { await guardarEstado(p, { texto: $('[data-texto]', el).value }); st.textContent = '✅ Texto guardado.'; });
     }
     if (p.estado !== 'cancelada') {
       boton('Compartir en WhatsApp', 'wa', async () => {
         st.textContent = 'Preparando…';
-        const blob = await (await fetch(urlImagen(p, 'post'))).blob();
+        const blob = await blobDe(urlImagen(p, 'post'));
         await compartir(p.texto || '', [new File([blob], p.id + '.jpg', { type: 'image/jpeg' })], st);
       });
-      boton('Historia', '', async () => { const blob = await (await fetch(urlImagen(p, 'historia'))).blob(); descargar(p.id + '-historia.jpg', blob); });
+      boton('Historia', '', async () => { descargar(p.id + '-historia.jpg', await blobDe(urlImagen(p, 'historia'))); });
       boton('Copiar texto', '', async () => { await navigator.clipboard.writeText(p.texto || ''); st.textContent = '✅ Texto copiado.'; });
       boton('Editar', '', async () => { cargarEnFormulario(p); });
       boton(p.estado === 'aprobada' ? 'Cancelar partida' : 'Descartar', 'peligro', async () => {
         if (!confirmar(p.estado === 'aprobada' ? 'Se quita de la web. Lo que ya salió en redes hay que borrarlo a mano. ¿Continuar?' : '¿Descartar esta partida? No se publicará.')) return;
-        await guardarEstado(p, { estado: 'cancelada' }, `Cancela partida: ${p.titulo}`); cargarLista();
+        await guardarEstado(p, { estado: 'cancelada' }); cargarLista();
       });
     }
     return el;
   }
-  async function guardarEstado(p, cambios, mensaje) {
-    // Se relee el archivo para no pisar lo que la acción de GitHub haya escrito (resultado de publicación)
-    const ruta = `partidas/${p.id}/partida.json`;
-    const actual = await gh(`/contents/${ruta}?ref=main`);
-    const datos = { ...JSON.parse(textoDeB64(actual.content)), ...cambios, actualizada: new Date().toISOString() };
-    await gh(`/contents/${ruta}`, { method: 'PUT', body: JSON.stringify({ message: mensaje, content: b64Texto(JSON.stringify(datos, null, 2) + '\n'), sha: actual.sha, branch: 'main' }) });
+  async function guardarEstado(p, cambios) {
+    if (!perfil?.esAdmin) throw new Error('Entra con tu cuenta de administración en «Ajustes».');
+    await updateDoc(doc(db, 'anuncios', p.id), { ...cambios, actualizada: new Date().toISOString() });
   }
   function cargarEnFormulario(p) {
     const d = p.diseno || {};
@@ -486,9 +494,9 @@
     estado('Datos de la mesa cargados. Revisa, ajusta la imagen si quieres y pulsa «Enviar a revisión».');
     if (m.portada) {
       try {
-        let r = await fetch(new URL(m.portada.replace(/-800\.jpg$/, '-1600.jpg'), WEB_BASE).href);
-        if (!r.ok) r = await fetch(new URL(m.portada, WEB_BASE).href);
-        if (r.ok) { const blob = await r.blob(); await ponerFoto(new File([blob], 'portada.jpg', { type: blob.type || 'image/jpeg' })); }
+        const url = new URL(m.portada, WEB_BASE).href;
+        const blob = await blobDe(url.replace(/-800\.jpg$/, '-1600.jpg')).catch(() => blobDe(url));
+        await ponerFoto(new File([blob], 'portada.jpg', { type: blob.type || 'image/jpeg' }));
       } catch (err) { console.warn('Portada no cargada', err); }
     }
   }
@@ -496,12 +504,39 @@
   $$('[data-filtro]').forEach((b) => b.addEventListener('click', () => { filtro = b.dataset.filtro; pintarLista(); }));
   $('#b-recargar').addEventListener('click', cargarLista);
 
-  /* ------------------------------------------------------------ ajustes */
-  $('#a-repo').value = ajustes().repo; $('#a-token').value = ajustes().token;
+  /* ------------------------------------------------------------ ajustes: cuenta */
+  $('#a-servidor').value = servidorUrl();
+  $('#b-entrar').addEventListener('click', async () => {
+    try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (err) { estado('❌ ' + err.message, '#estado-ajustes'); }
+  });
+  $('#b-salir').addEventListener('click', () => signOut(auth));
   $('#b-guardar-ajustes').addEventListener('click', async () => {
-    guardado.set('repo', $('#a-repo').value.trim() || REPO_DEF); guardado.set('token', $('#a-token').value.trim());
-    try { const r = await gh(''); estado(`✅ Conectado a ${r.full_name}. ${r.permissions?.push ? 'Puedes enviar y aprobar.' : 'Ojo: el token no tiene permiso de escritura.'}`, '#estado-ajustes'); cargarLista(); }
-    catch (err) { estado('❌ ' + err.message, '#estado-ajustes'); }
+    guardado.set('servidor', $('#a-servidor').value.trim());
+    await probarServidor();
+  });
+  async function probarServidor() {
+    if (!servidorUrl()) return estado('Falta la dirección del script (Avanzado).', '#estado-ajustes');
+    try {
+      const j = await (await fetch(servidorUrl())).json();
+      if (j.carpeta) $('#enlace-carpeta').href = j.carpeta;
+      estado(perfil?.esAdmin ? '✅ Todo listo: puedes enviar y aprobar anuncios.' : '✅ Script conectado.', '#estado-ajustes');
+    } catch (err) { estado('❌ No pude hablar con el script: ' + err.message, '#estado-ajustes'); }
+  }
+  onAuthStateChanged(auth, async (u) => {
+    perfil = null;
+    if (u) {
+      try {
+        const d = (await getDoc(doc(db, 'usuarios', u.uid))).data() || {};
+        perfil = { uid: u.uid, nombre: d.nombre || u.displayName || u.email, foto: u.photoURL, esAdmin: !!d.esAdmin };
+      } catch { perfil = { uid: u.uid, nombre: u.displayName || u.email, foto: u.photoURL, esAdmin: false }; }
+    }
+    $('#sesion-info').innerHTML = perfil
+      ? `${perfil.foto ? `<img alt="" src="${D.esc(perfil.foto)}">` : ''}<b>${D.esc(perfil.nombre)}</b> · ${perfil.esAdmin ? 'administración' : 'sin permisos de administración'}`
+      : 'Sin sesión.';
+    $('#b-entrar').hidden = !!perfil; $('#b-salir').hidden = !perfil;
+    if (perfil && !perfil.esAdmin) estado('Tu cuenta no es de administración: puedes ver, pero no enviar ni aprobar.', '#estado-ajustes');
+    else if (perfil) probarServidor();
+    cargarLista();
   });
 
   /* ------------------------------------------------------------ pestañas */
@@ -519,13 +554,13 @@
     actualizar();
     await cargarFuentes(); actualizar();
     const t = location.hash.slice(1);
-    mostrarTab(['nueva', 'revision', 'ajustes'].includes(t) ? t : (ajustes().token ? 'nueva' : 'nueva'));
+    mostrarTab(['nueva', 'revision', 'ajustes'].includes(t) ? t : 'nueva');
     const pedida = new URLSearchParams(location.search).get('mesa');
     if (pedida) {
       try { await desdeMesa(await unaMesa(pedida)); } catch (err) { estado('❌ ' + err.message); }
       history.replaceState(null, '', location.pathname + '#nueva');
     }
-    if (ajustes().token || t === 'revision') cargarLista();
+    // la lista se carga cuando Firebase dice si hay sesión (onAuthStateChanged)
   })();
   window.TPDPartidas = { WEB };
 })();
